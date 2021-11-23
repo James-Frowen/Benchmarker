@@ -29,6 +29,10 @@ namespace JamesFrowen.Benchmarker.Weaver
         static bool s_isRunning = false;
         static bool s_autoEnd = false;
 
+        public static bool IsRunning => s_isRunning;
+
+        public static event Action OnEndRecording;
+
         // called by IL 
         public static void RegisterMethod(string name)
         {
@@ -66,6 +70,7 @@ namespace JamesFrowen.Benchmarker.Weaver
         {
             s_isRunning = false;
             s_autoEnd = false;
+            OnEndRecording?.Invoke();
         }
 
         public static void NextFrame()
@@ -187,6 +192,9 @@ namespace JamesFrowen.Benchmarker
     public static class BenchmarkRunner
     {
         public static bool AutoLog = true;
+        public static string ResultFolder = ".";
+
+        public static bool IsRecording => BenchmarkHelper.IsRunning;
 
         /// <summary>
         /// Starts recording time and call count for methods
@@ -197,7 +205,18 @@ namespace JamesFrowen.Benchmarker
         {
             CheckUpdater();
             BenchmarkHelper.StartRecording(frameCount, autoEnd);
-
+            if (autoEnd)
+            {
+                BenchmarkHelper.OnEndRecording += AutoEnd;
+            }
+        }
+        static void AutoEnd()
+        {
+            BenchmarkHelper.OnEndRecording -= AutoEnd;
+            if (AutoLog)
+            {
+                LogResults();
+            }
         }
         public static void EndRecording()
         {
@@ -228,7 +247,7 @@ namespace JamesFrowen.Benchmarker
 #else
             string runtime = "Player";
 #endif
-            string path = $"./Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}.md";
+            string path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}.md";
             return path;
         }
 
@@ -526,6 +545,7 @@ namespace JamesFrowen.Benchmarker
 
             int[] paddingLength = GetPaddingLength(rows);
 
+            Debug.Log($"Saving benchmark results to {path}");
             using (var writer = new StreamWriter(path))
             {
 #if UNITY_SERVER
