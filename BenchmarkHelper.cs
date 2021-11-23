@@ -59,6 +59,7 @@ namespace JamesFrowen.Benchmarker.Weaver
         public static void StartRecording(int frameCount, bool autoEnd)
         {
             s_isRunning = true;
+            s_frameCount = frameCount;
             s_autoEnd = autoEnd;
             s_methods = new Dictionary<int, Frame[]>();
             foreach (int key in s_methodNames.Keys)
@@ -90,7 +91,6 @@ namespace JamesFrowen.Benchmarker.Weaver
                 }
             }
         }
-
 
         public static IReadOnlyList<Results> GetResults()
         {
@@ -135,21 +135,76 @@ namespace JamesFrowen.Benchmarker.Weaver
             return benchmark;
         }
 
+
         private static MethodInfo GetMethod(string fullName)
         {
             try
             {
-                string[] split = fullName.Split('.');
-                string methodName = split[split.Length - 1];
-                string typeName = string.Join(".", split, 0, split.Length - 1);
-                var type = Type.GetType(typeName);
-                IEnumerable<MethodInfo> methods = type.GetMethods(ALL_METHODS).Where(x => x.Name == methodName);
-                Debug.Assert(methods.Count() > 1, $"Found more than 1 method with name {fullName}");
-                return methods.First();
+                // example full name = `System.Void Mirage.NetworkServer::Update()`
+                fullName = fullName.Substring(fullName.IndexOf(" ") + 1);
+                int nameIndex = fullName.IndexOf("::");
+
+                string methodName = fullName.Substring(nameIndex + 2);
+                int bracketIndex = methodName.IndexOf("(");
+                methodName = methodName.Substring(0, bracketIndex);
+
+                string typeName = fullName.Substring(0, nameIndex);
+
+                Debug.Assert(typeName.Length != 0);
+                Debug.Assert(!typeName.Contains(":"));
+                Debug.Assert(!typeName.Contains(" "));
+
+                Debug.Assert(methodName.Length != 0);
+                Debug.Assert(!methodName.Contains(":"));
+                Debug.Assert(!methodName.Contains(" "));
+                Debug.Assert(!methodName.Contains("("));
+                Debug.Assert(!methodName.Contains(")"));
+                Debug.Assert(!methodName.Contains(","));
+
+                return GetMethod(typeName, methodName);
             }
             catch (Exception e)
             {
                 UnityEngine.Debug.LogException(e);
+                return null;
+            }
+        }
+
+        static MethodInfo GetMethod(string typeName, string methodName)
+        {
+            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                foreach (Type type in assembly.GetTypes())
+                {
+                    MethodInfo method = CheckType(type);
+                    if (method != null) { return method; }
+                }
+            }
+            return null;
+
+            MethodInfo CheckType(Type type)
+            {
+                if (type.FullName == typeName)
+                {
+                    foreach (MethodInfo method in type.GetMethods(ALL_METHODS))
+                    {
+                        if (method.Name == methodName)
+                        {
+                            // only matching if has attribute
+                            if (method.GetCustomAttribute<BenchmarkMethodAttribute>() != null)
+                            {
+                                return method;
+                            }
+                        }
+                    }
+                }
+
+                foreach (Type nested in type.GetNestedTypes())
+                {
+                    MethodInfo method = CheckType(nested);
+                    if (method != null) { return method; }
+                }
+
                 return null;
             }
         }
@@ -193,6 +248,7 @@ namespace JamesFrowen.Benchmarker
     {
         public static bool AutoLog = true;
         public static string ResultFolder = ".";
+        private static int s_previousFrameCount;
 
         public static bool IsRecording => BenchmarkHelper.IsRunning;
 
@@ -203,6 +259,7 @@ namespace JamesFrowen.Benchmarker
         /// <param name="autoEnd">Should recorind auto stop after <paramref name="frameCount"/> is reached</param>
         public static void StartRecording(int frameCount, bool autoEnd)
         {
+            s_previousFrameCount = frameCount;
             CheckUpdater();
             BenchmarkHelper.StartRecording(frameCount, autoEnd);
             if (autoEnd)
@@ -235,7 +292,7 @@ namespace JamesFrowen.Benchmarker
             BenchmarkAnalyser.CategoryGroup[] categories = analyser.GetCategories();
 
             var printer = new BenchmarkPrinter(path);
-            printer.PrintToMarkDownTable(categories);
+            printer.PrintToMarkDownTable(categories, $"FrameCount:{s_previousFrameCount}");
         }
 
         private static string GetSavePath()
@@ -310,7 +367,7 @@ namespace JamesFrowen.Benchmarker
         public readonly bool Failed;
 
         public IEnumerable<double> Elapsed => frames.Select(x => (double)x.time);
-        public int Count => frames.Length;
+        public IEnumerable<double> CallCounts => frames.Select(x => (double)x.count);
 
         public readonly Benchmark benchmark;
 
@@ -370,63 +427,75 @@ namespace JamesFrowen.Benchmarker
 
         private void ProcessCategory(CategoryGroup category)
         {
-            double? baseLineMean = null;
+            double? baselineMeanTime = null;
+            double? baselineMeanCount = null;
             if (category.baseline != null)
             {
                 Debug.Log($"baseLine for {category.name}: {category.baseline.benchmark.name}");
-                baseLineMean = GetMean(category.baseline);
+                baselineMeanTime = GetMean(category.baseline.Elapsed);
+                baselineMeanCount = GetMean(category.baseline.CallCounts);
             }
 
             category.processedResults = new List<ProcessedResults>();
             foreach (Results result in category.results)
             {
                 if (result.Failed) { continue; }
-
-                double mean = GetMean(result);
-                double stdDev = GetStandardDeviation(result, mean);
-                double stdError = GetStandardError(result, stdDev);
-                double? ratio = baseLineMean.HasValue ? mean / baseLineMean : null;
-                double min = GetMin(result);
-                double max = GetMax(result);
                 var processed = new ProcessedResults(result)
                 {
-                    mean = mean,
-                    ratio = ratio,
-                    stdDev = stdDev,
-                    stdError = stdError,
-                    min = min,
-                    max = max
+                    time = CreateDataGroup(result.Elapsed, baselineMeanTime),
+                    count = CreateDataGroup(result.CallCounts, baselineMeanCount)
                 };
                 category.processedResults.Add(processed);
             }
         }
 
-        private double GetMean(Results value)
+        private DataGroup CreateDataGroup(IEnumerable<double> values, double? baseLineMean)
         {
-            return value.Elapsed.Average() / Stopwatch.Frequency;
+            double mean = GetMean(values);
+            double stdDev = GetStandardDeviation(values, mean);
+            double stdError = GetStandardError(values, stdDev);
+            double? ratio = baseLineMean.HasValue ? mean / baseLineMean : null;
+            double min = GetMin(values);
+            double max = GetMax(values);
+            var time = new DataGroup
+            {
+
+                mean = mean,
+                ratio = ratio,
+                stdDev = stdDev,
+                stdError = stdError,
+                min = min,
+                max = max
+            };
+            return time;
         }
-        private double GetMin(Results value)
+
+        private double GetMean(IEnumerable<double> values)
         {
-            return value.Elapsed.Min() / Stopwatch.Frequency;
+            return values.Average() / Stopwatch.Frequency;
         }
-        private double GetMax(Results value)
+        private double GetMin(IEnumerable<double> values)
         {
-            return value.Elapsed.Max() / Stopwatch.Frequency;
+            return values.Min() / Stopwatch.Frequency;
         }
-        private double GetStandardDeviation(Results value, double mean)
+        private double GetMax(IEnumerable<double> values)
         {
-            double sum = value.Elapsed
+            return values.Max() / Stopwatch.Frequency;
+        }
+        private double GetStandardDeviation(IEnumerable<double> values, double mean)
+        {
+            double sum = values
                 // convert to time
                 .Select(x => x / Stopwatch.Frequency)
                 .Select(x => x - mean)
                 .Select(x => x * x)
                 .Sum();
 
-            return Math.Sqrt(sum / (value.Count - 1));
+            return Math.Sqrt(sum / (values.Count() - 1));
         }
-        private double GetStandardError(Results value, double stddev)
+        private double GetStandardError(IEnumerable<double> values, double stddev)
         {
-            return stddev / Math.Sqrt(value.Count);
+            return stddev / Math.Sqrt(values.Count());
         }
 
         public void SortResults()
@@ -460,6 +529,17 @@ namespace JamesFrowen.Benchmarker
             public bool Failed;
             public Benchmark benchmark;
 
+            public DataGroup time;
+            public DataGroup count;
+
+            public ProcessedResults(Results result)
+            {
+                Failed = result.Failed;
+                benchmark = result.benchmark;
+            }
+        }
+        public class DataGroup
+        {
             /// <summary>
             /// seconds
             /// </summary>
@@ -488,18 +568,12 @@ namespace JamesFrowen.Benchmarker
             /// seconds
             /// </summary>
             public double max;
-
-            public ProcessedResults(Results result)
-            {
-                Failed = result.Failed;
-                benchmark = result.benchmark;
-            }
         }
         public struct ProcessedResultsComparer : IComparer<ProcessedResults>
         {
             public int Compare(ProcessedResults x, ProcessedResults y)
             {
-                return x.mean.CompareTo(y.mean);
+                return x.time.mean.CompareTo(y.time.mean);
             }
         }
     }
@@ -513,7 +587,7 @@ namespace JamesFrowen.Benchmarker
             this.path = path;
         }
 
-        public void PrintToMarkDownTable(BenchmarkAnalyser.CategoryGroup[] categories)
+        public void PrintToMarkDownTable(BenchmarkAnalyser.CategoryGroup[] categories, params string[] headers)
         {
             if (categories.Length == 0)
             {
@@ -559,6 +633,17 @@ namespace JamesFrowen.Benchmarker
                 writer.WriteLine($"- IsEditor:{Application.isEditor}");
                 writer.WriteLine($"- IsDebug:{Debug.isDebugBuild}");
                 writer.WriteLine($"- IsServer:{isServer}");
+
+                if (headers != null && headers.Length > 0)
+                {
+                    writer.WriteLine();
+                    writer.WriteLine();
+                    foreach (string header in headers)
+                    {
+                        writer.WriteLine($"- {header}");
+                    }
+                }
+
 
                 writer.WriteLine();
                 writer.WriteLine();
@@ -670,8 +755,6 @@ namespace JamesFrowen.Benchmarker
             public string CreatePaddedString(int[] paddingLength)
             {
                 string[] cols = new string[Row.ColumnCount];
-                // empty either side so that extra | is added at edge
-                cols[cols.Length] = "";
 
                 for (int i = 0; i < Row.ColumnCount; i++)
                 {
@@ -728,16 +811,8 @@ namespace JamesFrowen.Benchmarker
                 }
                 else
                 {
-                    time = new DataGroup
-                    {
-                        mean = result.mean,
-                        stdDev = result.stdDev,
-                        stdError = result.stdError,
-                        min = result.min,
-                        max = result.max,
-                        ratio = result.ratio?.ToString("0.00") ?? string.Empty
-                    };
-                    count = DataGroup.NoResults;
+                    time = new DataGroup(result.time);
+                    count = new DataGroup(result.count);
                 }
             }
             public DataRow(string name, string description, string category, DataGroup time, DataGroup count)
@@ -783,6 +858,17 @@ namespace JamesFrowen.Benchmarker
                 public ValueWithUnit stdError = ValueWithUnit.NoResults;
                 public ValueWithUnit min = ValueWithUnit.NoResults;
                 public ValueWithUnit max = ValueWithUnit.NoResults;
+
+                public DataGroup() { }
+                public DataGroup(BenchmarkAnalyser.DataGroup data)
+                {
+                    mean = data.mean;
+                    stdDev = data.stdDev;
+                    stdError = data.stdError;
+                    min = data.min;
+                    max = data.max;
+                    ratio = data.ratio?.ToString("0.00") ?? string.Empty;
+                }
 
                 public void SetStringWithUnits(string suffix, double divider)
                 {
