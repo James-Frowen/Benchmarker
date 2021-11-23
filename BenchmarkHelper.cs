@@ -41,9 +41,9 @@ namespace JamesFrowen.Benchmarker.Weaver
             if (!s_isRunning) return;
 
             Frame[] method = s_methods[nameHash];
-            method[s_frameCount].count++;
             long end = GetTimestamp();
-            method[s_frameCount].time += (end - start);
+            method[s_frameIndex].time += (end - start);
+            method[s_frameIndex].count++;
         }
 
         // called by IL 

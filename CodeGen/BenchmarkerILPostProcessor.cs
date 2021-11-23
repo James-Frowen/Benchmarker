@@ -33,11 +33,16 @@ namespace JamesFrowen.Benchmarker.ILWeave
 
         public override ILPostProcessResult Process(ICompiledAssembly compiledAssembly)
         {
+            if (!WillProcess(compiledAssembly))
+                return null;
+
             try
             {
                 AssemblyDefinition assembly = Mirage.Weaver.Weaver.AssemblyDefinitionFor(compiledAssembly);
                 ModuleDefinition module = assembly.MainModule;
-                ProcessAllMethods(module);
+                bool anyChanges = ProcessAllMethods(module);
+                if (!anyChanges)
+                    return null;
 
                 // write
                 var pe = new MemoryStream();
@@ -64,7 +69,7 @@ namespace JamesFrowen.Benchmarker.ILWeave
             }
         }
 
-        void ProcessAllMethods(ModuleDefinition module)
+        bool ProcessAllMethods(ModuleDefinition module)
         {
             bool any = false;
             // create copies of collections incase we add any
@@ -85,6 +90,7 @@ namespace JamesFrowen.Benchmarker.ILWeave
                 ILProcessor worker = GeneratedMethod(module);
                 worker.Append(worker.Create(OpCodes.Ret));
             }
+            return any;
         }
 
         void InsertBenchmark(ModuleDefinition module, MethodDefinition method)
