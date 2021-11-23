@@ -1,4 +1,4 @@
-using JamesFrowen.Benchmarker.Weaver;
+using JamesFrowen.Benchmarker;
 using UnityEngine;
 
 public class MyClass : MonoBehaviour

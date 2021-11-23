@@ -109,7 +109,7 @@ namespace JamesFrowen.Benchmarker.Weaver
                 {
                     benchmark.name = attr.Name;
                     benchmark.description = attr.Description;
-                    benchmark.baseline = attr.baseline;
+                    benchmark.baseline = attr.Baseline;
                 }
                 BenchmarkCategoryAttribute cats = methodInfo.GetCustomAttribute<BenchmarkCategoryAttribute>();
                 if (cats != null)
@@ -154,7 +154,15 @@ namespace JamesFrowen.Benchmarker
 
         public string Description;
 
-        public bool baseline;
+        public bool Baseline;
+
+        public BenchmarkMethodAttribute() { }
+        public BenchmarkMethodAttribute(string name, bool baseline = false, string description = "")
+        {
+            Name = name;
+            Baseline = baseline;
+            Description = description;
+        }
     }
 
     [AttributeUsage(AttributeTargets.Method)]
