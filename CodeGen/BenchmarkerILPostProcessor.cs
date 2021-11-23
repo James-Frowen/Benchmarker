@@ -1,3 +1,12 @@
+/*******************************************************
+ * Copyright (C) 2010-2011 James Frowen <JamesFrowenDev@gmail.com>
+ * 
+ * This file is part of JamesFrowen Benchmarker
+ * 
+ * The code below can not be copied and/or distributed without the express
+ * permission of James Frowen
+ *******************************************************/
+
 using System;
 using System.Collections.Generic;
 using System.IO;

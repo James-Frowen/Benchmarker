@@ -1,3 +1,12 @@
+/*******************************************************
+ * Copyright (C) 2010-2011 James Frowen <JamesFrowenDev@gmail.com>
+ * 
+ * This file is part of JamesFrowen Benchmarker
+ * 
+ * The code below can not be copied and/or distributed without the express
+ * permission of James Frowen
+ *******************************************************/
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -29,7 +38,7 @@ namespace JamesFrowen.Benchmarker.Weaver
         // called by IL 
         public static void EndMethod(int nameHash, long start)
         {
-            if (s_isRunning) return;
+            if (!s_isRunning) return;
 
             Frame[] method = s_methods[nameHash];
             method[s_frameCount].count++;
@@ -800,4 +809,3 @@ namespace JamesFrowen.Benchmarker
 
     }
 }
-
