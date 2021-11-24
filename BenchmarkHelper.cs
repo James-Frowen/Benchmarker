@@ -13,6 +13,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using JamesFrowen.Benchmarker.Weaver;
 using UnityEngine;
 using Debug = UnityEngine.Debug;
@@ -26,6 +27,7 @@ namespace JamesFrowen.Benchmarker.Weaver
 
         static int s_frameCount = 300;
         static int s_frameIndex = 0;
+        static bool s_waitForFirstFrame = true;
         static bool s_isRunning = false;
         static bool s_autoEnd = false;
 
@@ -33,16 +35,18 @@ namespace JamesFrowen.Benchmarker.Weaver
 
         public static event Action OnEndRecording;
 
-        // called by IL 
+        // called by IL
         public static void RegisterMethod(string name)
         {
             s_methodNames.Add(name.GetHashCode(), name);
         }
 
-        // called by IL 
+        // called by IL
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void EndMethod(int nameHash, long start)
         {
             if (!s_isRunning) return;
+            if (s_waitForFirstFrame) return;
 
             Frame[] method = s_methods[nameHash];
             long end = GetTimestamp();
@@ -51,14 +55,16 @@ namespace JamesFrowen.Benchmarker.Weaver
         }
 
         // called by IL 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static long GetTimestamp()
         {
             return Stopwatch.GetTimestamp();
         }
 
-        public static void StartRecording(int frameCount, bool autoEnd)
+        public static void StartRecording(int frameCount, bool autoEnd, bool waitForFirstFrame)
         {
             s_isRunning = true;
+            s_waitForFirstFrame = waitForFirstFrame;
             s_frameCount = frameCount;
             s_autoEnd = autoEnd;
             s_methods = new Dictionary<int, Frame[]>();
@@ -71,11 +77,19 @@ namespace JamesFrowen.Benchmarker.Weaver
         {
             s_isRunning = false;
             s_autoEnd = false;
+            s_waitForFirstFrame = false;
             OnEndRecording?.Invoke();
         }
 
         public static void NextFrame()
         {
+            // set to false and then return, results will started being recorded from now
+            if (s_waitForFirstFrame)
+            {
+                s_waitForFirstFrame = false;
+                return;
+            }
+
             if (!s_isRunning) return;
 
             s_frameIndex++;
@@ -84,9 +98,11 @@ namespace JamesFrowen.Benchmarker.Weaver
                 if (s_autoEnd)
                 {
                     EndRecording();
+                    return;
                 }
                 else
                 {
+                    // todo do we need to clean frame? or we will just start adding to buffer again
                     s_frameIndex = 0;
                 }
             }
@@ -100,10 +116,18 @@ namespace JamesFrowen.Benchmarker.Weaver
                 string fullName = s_methodNames[key];
                 Frame[] frames = s_methods[key];
 
+                if (NoResults(frames))
+                    continue;
+
                 Benchmark benchmark = CreateDetails(fullName);
                 results.Add(new Results(frames, benchmark));
             }
             return results;
+
+            bool NoResults(Frame[] frames)
+            {
+                return frames.All(x => x.count == 0);
+            }
         }
 
         const BindingFlags ALL_METHODS = (BindingFlags)(-1);
@@ -257,11 +281,12 @@ namespace JamesFrowen.Benchmarker
         /// </summary>
         /// <param name="frameCount">How many frames to record for. If <paramref name="autoEnd"/> is true will end after this time, else will loop back to start of buffer</param>
         /// <param name="autoEnd">Should recorind auto stop after <paramref name="frameCount"/> is reached</param>
-        public static void StartRecording(int frameCount, bool autoEnd)
+        /// <param name="waitForFirstFrame">Delay recording till NextFrame is called for the first time</param>
+        public static void StartRecording(int frameCount, bool autoEnd, bool waitForFirstFrame)
         {
             s_previousFrameCount = frameCount;
             CheckUpdater();
-            BenchmarkHelper.StartRecording(frameCount, autoEnd);
+            BenchmarkHelper.StartRecording(frameCount, autoEnd, waitForFirstFrame);
             if (autoEnd)
             {
                 BenchmarkHelper.OnEndRecording += AutoEnd;
@@ -366,7 +391,11 @@ namespace JamesFrowen.Benchmarker
         public readonly Frame[] frames;
         public readonly bool Failed;
 
-        public IEnumerable<double> Elapsed => frames.Select(x => (double)x.time);
+        // in order to get averages we need to add (time/Count)  count times to list
+        // this will give weighted average for average time per frame
+        public IEnumerable<double> ElapsedPerMethod => frames.Where(x => x.count != 0).SelectMany(x => Enumerable.Repeat(frameTimeToSeconds(x), x.count));
+        double frameTimeToSeconds(Frame x) => ((double)x.time / x.count) / Stopwatch.Frequency;
+        public IEnumerable<double> ElapsedPerFrame => frames.Select(x => (double)x.time / Stopwatch.Frequency);
         public IEnumerable<double> CallCounts => frames.Select(x => (double)x.count);
 
         public readonly Benchmark benchmark;
@@ -387,13 +416,14 @@ namespace JamesFrowen.Benchmarker
         {
             foreach (Results result in results)
             {
-                if (result.benchmark.categories.Length == 0)
+                string[] categories = result.benchmark.categories;
+                if (categories == null || categories.Length == 0)
                 {
                     addResultsToCategory(string.Empty, result);
                 }
                 else
                 {
-                    foreach (string cat in result.benchmark.categories)
+                    foreach (string cat in categories)
                     {
                         addResultsToCategory(cat, result);
                     }
@@ -401,6 +431,7 @@ namespace JamesFrowen.Benchmarker
             }
 
             ProcessAllResults();
+            SortResults();
         }
 
         private void addResultsToCategory(string key, Results result)
@@ -427,13 +458,15 @@ namespace JamesFrowen.Benchmarker
 
         private void ProcessCategory(CategoryGroup category)
         {
-            double? baselineMeanTime = null;
+            double? baselineMeanMethodTime = null;
             double? baselineMeanCount = null;
+            double? baselineMeanFrameTime = null;
             if (category.baseline != null)
             {
                 Debug.Log($"baseLine for {category.name}: {category.baseline.benchmark.name}");
-                baselineMeanTime = GetMean(category.baseline.Elapsed);
+                baselineMeanMethodTime = GetMean(category.baseline.ElapsedPerMethod);
                 baselineMeanCount = GetMean(category.baseline.CallCounts);
+                baselineMeanFrameTime = GetMean(category.baseline.ElapsedPerFrame);
             }
 
             category.processedResults = new List<ProcessedResults>();
@@ -442,8 +475,9 @@ namespace JamesFrowen.Benchmarker
                 if (result.Failed) { continue; }
                 var processed = new ProcessedResults(result)
                 {
-                    time = CreateDataGroup(result.Elapsed, baselineMeanTime),
-                    count = CreateDataGroup(result.CallCounts, baselineMeanCount)
+                    methodTime = CreateDataGroup(result.ElapsedPerMethod, baselineMeanMethodTime),
+                    count = CreateDataGroup(result.CallCounts, baselineMeanCount),
+                    frameTime = CreateDataGroup(result.ElapsedPerFrame, baselineMeanFrameTime),
                 };
                 category.processedResults.Add(processed);
             }
@@ -457,9 +491,9 @@ namespace JamesFrowen.Benchmarker
             double? ratio = baseLineMean.HasValue ? mean / baseLineMean : null;
             double min = GetMin(values);
             double max = GetMax(values);
-            var time = new DataGroup
-            {
 
+            var data = new DataGroup
+            {
                 mean = mean,
                 ratio = ratio,
                 stdDev = stdDev,
@@ -467,26 +501,26 @@ namespace JamesFrowen.Benchmarker
                 min = min,
                 max = max
             };
-            return time;
+            return data;
         }
 
         private double GetMean(IEnumerable<double> values)
         {
-            return values.Average() / Stopwatch.Frequency;
+            return values.Average();
         }
         private double GetMin(IEnumerable<double> values)
         {
-            return values.Min() / Stopwatch.Frequency;
+            return values.Min();
         }
         private double GetMax(IEnumerable<double> values)
         {
-            return values.Max() / Stopwatch.Frequency;
+            return values.Max();
         }
         private double GetStandardDeviation(IEnumerable<double> values, double mean)
         {
             double sum = values
                 // convert to time
-                .Select(x => x / Stopwatch.Frequency)
+                .Select(x => x)
                 .Select(x => x - mean)
                 .Select(x => x * x)
                 .Sum();
@@ -529,8 +563,9 @@ namespace JamesFrowen.Benchmarker
             public bool Failed;
             public Benchmark benchmark;
 
-            public DataGroup time;
+            public DataGroup methodTime;
             public DataGroup count;
+            public DataGroup frameTime;
 
             public ProcessedResults(Results result)
             {
@@ -573,7 +608,7 @@ namespace JamesFrowen.Benchmarker
         {
             public int Compare(ProcessedResults x, ProcessedResults y)
             {
-                return x.time.mean.CompareTo(y.time.mean);
+                return x.methodTime.mean.CompareTo(y.methodTime.mean);
             }
         }
     }
@@ -596,7 +631,7 @@ namespace JamesFrowen.Benchmarker
             var rows = new List<Row>();
 
             //title
-            rows.AddRange(Row.Title);
+            rows.AddRange(Row.GetTitle());
             rows.Add(Row.Empty);
 
             for (int i = 0; i < categories.Length; i++)
@@ -671,15 +706,19 @@ namespace JamesFrowen.Benchmarker
 
         private static void SetUnits(List<Row> rows)
         {
-            IEnumerable<DataRow.DataGroup> timeGroup = rows.Select(x => x as DataRow).Where(x => x != null)
-                .Select(x => x.time);
-            IEnumerable<DataRow.DataGroup> countGroup = rows.Select(x => x as DataRow).Where(x => x != null)
-                .Select(x => x.time);
+            IEnumerable<DataRow> dataRows = rows.Select(x => x as DataRow).Where(x => x != null);
 
-            SetUnits(timeGroup);
-            SetUnits(countGroup);
+            SetTimeUnits(dataRows.Select(x => x.methodTime));
+            SetTimeUnits(dataRows.Select(x => x.frameTime));
+
+            foreach (DataRow.DataGroup row in dataRows.Select(x => x.count))
+            {
+                row.SetStringWithUnits("", 1);
+            }
         }
-        private static void SetUnits(IEnumerable<DataRow.DataGroup> dataGroups)
+
+
+        private static void SetTimeUnits(IEnumerable<DataRow.DataGroup> dataGroups)
         {
             double[] means = (dataGroups
                 .Select(x => x.mean.raw)
@@ -694,44 +733,48 @@ namespace JamesFrowen.Benchmarker
 
             double min = means.Min();
 
-            (string suffix, double divider) = GetSuffix(min);
+            (string suffix, double divider) = UnitHelper.GetTimeSuffix(min);
 
             foreach (DataRow.DataGroup row in dataGroups)
             {
-                if (row.mean.raw.HasValue)
-                {
-                    row.SetStringWithUnits(suffix, divider);
-                }
+                row.SetStringWithUnits(suffix, divider);
             }
         }
 
-        public static (string suffix, double divider) GetSuffix(double min)
-        {
-            const double s = 1;
-            const double ms = s / 1_000;
-            const double us = ms / 1_000;
-            const double ns = us / 1_000;
-
-            if (min > s) return (nameof(s), s);
-            else if (min > ms) return (nameof(ms), ms);
-            else if (min > us) return (nameof(us), us);
-            else if (min > ns) return (nameof(ns), ns);
-            else return (nameof(ns), ns);
-        }
 
         abstract class Row
         {
+            // text+6*data
+            public const int ColumnCount = 3 + 6 * 3;
+
             public static readonly Row Empty = new EmptyRow();
-            public static IEnumerable<Row> Title => new Row[] {
 
-                new StringRow("Name", "Description", "Category", "Time", "", "", "", "", "", "Count", "", "", "", "", ""),
-                new StringRow("", "", "", "Mean", "Ratio", "StdDev", "StdError", "min", "max","Mean", "Ratio", "StdDev", "StdError", "min", "max"),
+            public static IEnumerable<Row> GetTitle()
+            {
+                string[] dataHeaders = new string[] { "Mean", "Ratio", "StdDev", "StdError", "min", "max" };
+
+                IEnumerable<string> first = new string[] { "Name", "Description", "Category" };
+                IEnumerable<string> second = Enumerable.Repeat("", 3);
+
+
+                first = first.Append("time").Append("method").Concat(Enumerable.Repeat("", 4));
+                second = second.Concat(dataHeaders);
+
+                first = first.Append("count").Concat(Enumerable.Repeat("", 5));
+                second = second.Concat(dataHeaders);
+
+                first = first.Append("time").Append("frame").Concat(Enumerable.Repeat("", 4));
+                second = second.Concat(dataHeaders);
+
+
+                return new Row[] {
+                new StringRow(first.ToArray()),
+                new StringRow(second.ToArray())
             };
-
+            }
 
             public char padding = ' ';
 
-            public const int ColumnCount = 15;
             public abstract string GetValue(int column);
 
             public string GetPaddedValue(int column, int width, char padding)
@@ -795,8 +838,9 @@ namespace JamesFrowen.Benchmarker
             public string name;
             public string description;
             public string category;
-            public DataGroup time;
+            public DataGroup methodTime;
             public DataGroup count;
+            public DataGroup frameTime;
 
             public DataRow(BenchmarkAnalyser.ProcessedResults result, string category)
             {
@@ -806,13 +850,15 @@ namespace JamesFrowen.Benchmarker
 
                 if (result.Failed)
                 {
-                    time = DataGroup.NoResults;
+                    methodTime = DataGroup.NoResults;
                     count = DataGroup.NoResults;
+                    frameTime = DataGroup.NoResults;
                 }
                 else
                 {
-                    time = new DataGroup(result.time);
+                    methodTime = new DataGroup(result.methodTime);
                     count = new DataGroup(result.count);
+                    frameTime = new DataGroup(result.frameTime);
                 }
             }
             public DataRow(string name, string description, string category, DataGroup time, DataGroup count)
@@ -820,32 +866,19 @@ namespace JamesFrowen.Benchmarker
                 this.name = name;
                 this.description = description;
                 this.category = category;
-                this.time = time;
+                methodTime = time;
                 this.count = count;
             }
 
             public override string GetValue(int column)
             {
-                switch (column)
-                {
-                    case 0: return name;
-                    case 1: return description;
-                    case 2: return category;
-                    case 3: return time.mean.ToString();
-                    case 4: return time.ratio;
-                    case 5: return time.stdDev.ToString();
-                    case 6: return time.stdError.ToString();
-                    case 7: return time.min.ToString();
-                    case 8: return time.max.ToString();
-
-                    case 9: return count.mean.ToString();
-                    case 10: return count.ratio;
-                    case 11: return count.stdDev.ToString();
-                    case 12: return count.stdError.ToString();
-                    case 13: return count.min.ToString();
-                    case 14: return count.max.ToString();
-                }
-                throw new IndexOutOfRangeException();
+                if (column == 0) return name;
+                else if (column == 1) return description;
+                else if (column == 2) return category;
+                else if (column < 3 + 6 * 1) return methodTime.GetValue(column - (3 + 6 * 0));
+                else if (column < 3 + 6 * 2) return count.GetValue(column - (3 + 6 * 1));
+                else if (column < 3 + 6 * 3) return frameTime.GetValue(column - (3 + 6 * 2));
+                else throw new IndexOutOfRangeException();
             }
 
             public class DataGroup
@@ -877,6 +910,20 @@ namespace JamesFrowen.Benchmarker
                     stdError.SetStringWithUnits(suffix, divider);
                     min.SetStringWithUnits(suffix, divider);
                     max.SetStringWithUnits(suffix, divider);
+                }
+
+                internal string GetValue(int column)
+                {
+                    switch (column)
+                    {
+                        case 0: return mean.ToString();
+                        case 1: return ratio;
+                        case 2: return stdDev.ToString();
+                        case 3: return stdError.ToString();
+                        case 4: return min.ToString();
+                        case 5: return max.ToString();
+                        default: throw new IndexOutOfRangeException();
+                    }
                 }
             }
             public struct ValueWithUnit
@@ -912,6 +959,22 @@ namespace JamesFrowen.Benchmarker
                 }
             }
         }
+    }
+    static class UnitHelper
+    {
+        public static (string suffix, double divider) GetTimeSuffix(double min)
+        {
+            const double s = 1;
+            const double ms = s / 1_000;
+            const double us = ms / 1_000;
+            const double ns = us / 1_000;
 
+            if (min > s) return (nameof(s), s);
+            else if (min > ms) return (nameof(ms), ms);
+            else if (min > us) return (nameof(us), us);
+            else if (min > ns) return (nameof(ns), ns);
+            else return (nameof(ns), ns);
+        }
     }
 }
+
