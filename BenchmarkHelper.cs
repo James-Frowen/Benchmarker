@@ -1,11 +1,26 @@
-/*******************************************************
- * Copyright (C) 2010-2011 James Frowen <JamesFrowenDev@gmail.com>
- * 
- * This file is part of JamesFrowen Benchmarker
- * 
- * The code below can not be copied and/or distributed without the express
- * permission of James Frowen
- *******************************************************/
+/*
+MIT License
+
+Copyright (c) 2022 James Frowen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
 
 using System;
 using System.Collections.Generic;
@@ -38,7 +53,7 @@ namespace JamesFrowen.Benchmarker.Weaver
         // called by IL
         public static void RegisterMethod(string name)
         {
-            s_methodNames.Add(name.GetHashCode(), name);
+            s_methodNames[name.GetHashCode()] = name;
         }
 
         // called by IL
@@ -267,7 +282,6 @@ namespace JamesFrowen.Benchmarker
             this.categories = categories;
         }
     }
-
     public static class BenchmarkRunner
     {
         public static bool AutoLog = true;
@@ -280,7 +294,7 @@ namespace JamesFrowen.Benchmarker
         /// Starts recording time and call count for methods
         /// </summary>
         /// <param name="frameCount">How many frames to record for. If <paramref name="autoEnd"/> is true will end after this time, else will loop back to start of buffer</param>
-        /// <param name="autoEnd">Should recorind auto stop after <paramref name="frameCount"/> is reached</param>
+        /// <param name="autoEnd">Should auto stop after <paramref name="frameCount"/> is reached</param>
         /// <param name="waitForFirstFrame">Delay recording till NextFrame is called for the first time</param>
         public static void StartRecording(int frameCount, bool autoEnd, bool waitForFirstFrame)
         {
