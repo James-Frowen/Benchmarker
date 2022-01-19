@@ -6,6 +6,9 @@ Benchmarker for methods in unity. Add attribute to methods and run your game, Be
 - Mono.cecil
 - Mirage (for IL helper methods)
 
+## Install 
+
+Import all files into project
 
 ## How to use 
 
