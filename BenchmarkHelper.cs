@@ -669,6 +669,7 @@ namespace JamesFrowen.Benchmarker
             int[] paddingLength = GetPaddingLength(rows);
 
             Debug.Log($"Saving benchmark results to {path}");
+            checkDirectroy(path);
             using (var writer = new StreamWriter(path))
             {
 #if UNITY_SERVER
@@ -706,6 +707,14 @@ namespace JamesFrowen.Benchmarker
             }
         }
 
+        private void checkDirectroy(string path)
+        {
+            string dir = Path.GetDirectoryName(path);
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+        }
 
         static int[] GetPaddingLength(List<Row> rows)
         {
