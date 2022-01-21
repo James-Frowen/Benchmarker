@@ -88,6 +88,15 @@ namespace JamesFrowen.Benchmarker.Weaver
             }
         }
 
+        /// <summary>
+        /// Used to pause or resume recording. Can useful to pause durning any warmup loops
+        /// </summary>
+        /// <param name="pause"></param>
+        public static void PauseRecording(bool pause)
+        {
+            s_isRunning = !pause;
+        }
+
         public static void EndRecording()
         {
             s_isRunning = false;
