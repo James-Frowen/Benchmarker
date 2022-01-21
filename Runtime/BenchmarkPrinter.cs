@@ -1,0 +1,391 @@
+﻿/*
+MIT License
+
+Copyright (c) 2022 James Frowen
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using UnityEngine;
+using Debug = UnityEngine.Debug;
+
+namespace JamesFrowen.Benchmarker
+{
+    public class BenchmarkPrinter
+    {
+        private readonly string path;
+
+        public BenchmarkPrinter(string path)
+        {
+            this.path = path;
+        }
+
+        public void PrintToMarkDownTable(BenchmarkAnalyser.CategoryGroup[] categories, params string[] headers)
+        {
+            if (categories.Length == 0)
+            {
+                Debug.LogWarning("No Categories to print");
+            }
+            var rows = new List<Row>();
+
+            //title
+            rows.AddRange(Row.GetTitle());
+            rows.Add(Row.Empty);
+
+            for (int i = 0; i < categories.Length; i++)
+            {
+                if (i > 0)
+                {
+                    // spacer
+                    rows.Add(Row.Empty);
+                }
+
+                BenchmarkAnalyser.CategoryGroup category = categories[i];
+                foreach (BenchmarkAnalyser.ProcessedResults result in category.processedResults)
+                {
+                    rows.Add(new DataRow(result, category.name));
+                }
+            }
+
+            // todo do we only want to set units per catetgory?
+            SetUnits(rows);
+
+            int[] paddingLength = GetPaddingLength(rows);
+
+            Debug.Log($"Saving benchmark results to {path}");
+            CheckDirectory(path);
+            using (var writer = new StreamWriter(path))
+            {
+#if UNITY_SERVER
+                bool isServer = true;
+#else
+                bool isServer = false;
+#endif
+                writer.WriteLine("**Application**");
+                writer.WriteLine($"- UnityVersion:{Application.unityVersion}");
+                writer.WriteLine($"- Platform:{Application.platform}");
+                writer.WriteLine($"- IsEditor:{Application.isEditor}");
+                writer.WriteLine($"- IsDebug:{Debug.isDebugBuild}");
+                writer.WriteLine($"- IsServer:{isServer}");
+
+                if (headers != null && headers.Length > 0)
+                {
+                    writer.WriteLine();
+                    writer.WriteLine();
+                    foreach (string header in headers)
+                    {
+                        writer.WriteLine($"- {header}");
+                    }
+                }
+
+
+                writer.WriteLine();
+                writer.WriteLine();
+                writer.WriteLine("**Results**");
+                writer.WriteLine();
+
+                foreach (Row row in rows)
+                {
+                    writer.WriteLine(row.CreatePaddedString(paddingLength));
+                }
+            }
+        }
+
+        private void CheckDirectory(string path)
+        {
+            string dir = Path.GetDirectoryName(path);
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+        }
+
+        static int[] GetPaddingLength(List<Row> rows)
+        {
+            int[] max = new int[Row.ColumnCount];
+            for (int i = 0; i < Row.ColumnCount; i++)
+            {
+                max[i] = rows.Max(x => x.GetValue(i).Length);
+            }
+            return max;
+        }
+
+
+        private static void SetUnits(List<Row> rows)
+        {
+            IEnumerable<DataRow> dataRows = rows.Select(x => x as DataRow).Where(x => x != null);
+
+            SetTimeUnits(dataRows.Select(x => x.methodTime));
+            SetTimeUnits(dataRows.Select(x => x.frameTime));
+
+            foreach (DataRow.DataGroup row in dataRows.Select(x => x.count))
+            {
+                row.SetStringWithUnits("", 1);
+            }
+        }
+
+
+        private static void SetTimeUnits(IEnumerable<DataRow.DataGroup> dataGroups)
+        {
+            double[] means = (dataGroups
+                .Select(x => x.mean.raw)
+                .Where(x => x.HasValue)
+                .Select(x => x.Value)
+                .ToArray());
+
+            if (means.Length == 0)
+            {
+                return;
+            }
+
+            double min = means.Min();
+
+            (string suffix, double divider) = UnitHelper.GetTimeSuffix(min);
+
+            foreach (DataRow.DataGroup row in dataGroups)
+            {
+                row.SetStringWithUnits(suffix, divider);
+            }
+        }
+
+
+        abstract class Row
+        {
+            // text+6*data
+            public const int ColumnCount = 3 + 6 * 3;
+
+            public static readonly Row Empty = new EmptyRow();
+
+            public static IEnumerable<Row> GetTitle()
+            {
+                string[] dataHeaders = new string[] { "Mean", "Ratio", "StdDev", "StdError", "min", "max" };
+
+                IEnumerable<string> first = new string[] { "Name", "Description", "Category" };
+                IEnumerable<string> second = Enumerable.Repeat("", 3);
+
+
+                first = first.Append("time").Append("method").Concat(Enumerable.Repeat("", 4));
+                second = second.Concat(dataHeaders);
+
+                first = first.Append("count").Concat(Enumerable.Repeat("", 5));
+                second = second.Concat(dataHeaders);
+
+                first = first.Append("time").Append("frame").Concat(Enumerable.Repeat("", 4));
+                second = second.Concat(dataHeaders);
+
+
+                return new Row[] {
+                new StringRow(first.ToArray()),
+                new StringRow(second.ToArray())
+            };
+            }
+
+            public char padding = ' ';
+
+            public abstract string GetValue(int column);
+
+            public string GetPaddedValue(int column, int width, char padding)
+            {
+                string value = GetValue(column);
+                bool rightPad = isRightPad(column);
+
+                return rightPad
+                    ? value.PadRight(width, padding)
+                    : value.PadLeft(width, padding);
+
+                // some columns are left padded
+                bool isRightPad(int ColumnCount)
+                {
+                    // first 3 are text columns and will be right padded
+                    // rest are numbers and will be left padded
+                    return ColumnCount < 3;
+                }
+
+            }
+            public string CreatePaddedString(int[] paddingLength)
+            {
+                string[] cols = new string[Row.ColumnCount];
+
+                for (int i = 0; i < Row.ColumnCount; i++)
+                {
+                    // 1 padding either side
+                    string inner = GetPaddedValue(i, paddingLength[i], padding);
+                    cols[i] = padding + inner + padding;
+                }
+                string joined = string.Join("|", cols);
+                return $"|{joined}|";
+            }
+        }
+        class StringRow : Row
+        {
+            string[] values;
+            public StringRow(params string[] values)
+            {
+                this.values = values;
+            }
+
+            public override string GetValue(int column)
+            {
+                return values[column];
+            }
+        }
+        class EmptyRow : Row
+        {
+            public EmptyRow()
+            {
+                padding = '-';
+            }
+            public override string GetValue(int column)
+            {
+                return string.Empty;
+            }
+        }
+        class DataRow : Row
+        {
+            public string name;
+            public string description;
+            public string category;
+            public DataGroup methodTime;
+            public DataGroup count;
+            public DataGroup frameTime;
+
+            public DataRow(BenchmarkAnalyser.ProcessedResults result, string category)
+            {
+                name = result.benchmark.name;
+                description = result.benchmark.description;
+                this.category = category;
+
+                if (result.Failed)
+                {
+                    methodTime = DataGroup.NoResults;
+                    count = DataGroup.NoResults;
+                    frameTime = DataGroup.NoResults;
+                }
+                else
+                {
+                    methodTime = new DataGroup(result.methodTime);
+                    count = new DataGroup(result.count);
+                    frameTime = new DataGroup(result.frameTime);
+                }
+            }
+            public DataRow(string name, string description, string category, DataGroup time, DataGroup count)
+            {
+                this.name = name;
+                this.description = description;
+                this.category = category;
+                methodTime = time;
+                this.count = count;
+            }
+
+            public override string GetValue(int column)
+            {
+                if (column == 0) return name;
+                else if (column == 1) return description;
+                else if (column == 2) return category;
+                else if (column < 3 + 6 * 1) return methodTime.GetValue(column - (3 + 6 * 0));
+                else if (column < 3 + 6 * 2) return count.GetValue(column - (3 + 6 * 1));
+                else if (column < 3 + 6 * 3) return frameTime.GetValue(column - (3 + 6 * 2));
+                else throw new IndexOutOfRangeException();
+            }
+
+            public class DataGroup
+            {
+                public static DataGroup NoResults => new DataGroup();
+
+                public ValueWithUnit mean = ValueWithUnit.NoResults;
+                public string ratio = "NA";
+                public ValueWithUnit stdDev = ValueWithUnit.NoResults;
+                public ValueWithUnit stdError = ValueWithUnit.NoResults;
+                public ValueWithUnit min = ValueWithUnit.NoResults;
+                public ValueWithUnit max = ValueWithUnit.NoResults;
+
+                public DataGroup() { }
+                public DataGroup(BenchmarkAnalyser.DataGroup data)
+                {
+                    mean = data.mean;
+                    stdDev = data.stdDev;
+                    stdError = data.stdError;
+                    min = data.min;
+                    max = data.max;
+                    ratio = data.ratio?.ToString("0.00") ?? string.Empty;
+                }
+
+                public void SetStringWithUnits(string suffix, double divider)
+                {
+                    mean.SetStringWithUnits(suffix, divider);
+                    stdDev.SetStringWithUnits(suffix, divider);
+                    stdError.SetStringWithUnits(suffix, divider);
+                    min.SetStringWithUnits(suffix, divider);
+                    max.SetStringWithUnits(suffix, divider);
+                }
+
+                internal string GetValue(int column)
+                {
+                    switch (column)
+                    {
+                        case 0: return mean.ToString();
+                        case 1: return ratio;
+                        case 2: return stdDev.ToString();
+                        case 3: return stdError.ToString();
+                        case 4: return min.ToString();
+                        case 5: return max.ToString();
+                        default: throw new IndexOutOfRangeException();
+                    }
+                }
+            }
+            public struct ValueWithUnit
+            {
+                public static ValueWithUnit NoResults => new ValueWithUnit { text = "NA" };
+
+                public string text;
+                public double? raw;
+
+                public ValueWithUnit(double raw)
+                {
+                    this.raw = raw;
+                    text = null;
+                }
+
+                public void SetStringWithUnits(string suffix, double divider)
+                {
+                    if (raw.HasValue)
+                    {
+                        double value = raw.Value / divider;
+                        text = $"{value:0.000} {suffix}";
+                    }
+                }
+
+                public override string ToString()
+                {
+                    return text;
+                }
+
+                public static implicit operator ValueWithUnit(double raw)
+                {
+                    return new ValueWithUnit(raw);
+                }
+            }
+        }
+    }
+}
+
