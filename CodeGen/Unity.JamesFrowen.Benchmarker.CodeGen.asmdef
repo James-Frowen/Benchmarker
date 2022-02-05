@@ -2,7 +2,7 @@
     "name": "Unity.JamesFrowen.Benchmarker.CodeGen",
     "references": [
         "JamesFrowen.Benchmarker",
-        "Unity.Mirage.CodeGen"
+        "Unity.BetterCecil.CodeGen"
     ],
     "includePlatforms": [
         "Editor"
