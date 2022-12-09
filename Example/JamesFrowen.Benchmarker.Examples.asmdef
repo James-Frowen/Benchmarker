@@ -1,0 +1,6 @@
+{
+    "name": "JamesFrowen.Benchmarker.Examples",
+    "references": [
+        "JamesFrowen.Benchmarker"
+    ]
+}
