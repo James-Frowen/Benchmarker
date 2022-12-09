@@ -206,7 +206,13 @@ namespace JamesFrowen.Benchmarker
 
             public char padding = ' ';
 
-            public abstract string GetValue(int column);
+            public string GetValue(int column)
+            {
+                // null check just incase value was not set, better than having NullRef throw later
+                return _GetValue(column) ?? "<NULL>";
+            }
+
+            protected abstract string _GetValue(int column);
 
             public string GetPaddedValue(int column, int width, char padding)
             {
@@ -249,7 +255,7 @@ namespace JamesFrowen.Benchmarker
                 this.values = values;
             }
 
-            public override string GetValue(int column)
+            protected override string _GetValue(int column)
             {
                 return values[column];
             }
@@ -261,7 +267,7 @@ namespace JamesFrowen.Benchmarker
             {
                 padding = '-';
             }
-            public override string GetValue(int column)
+            protected override string _GetValue(int column)
             {
                 return string.Empty;
             }
@@ -304,7 +310,7 @@ namespace JamesFrowen.Benchmarker
                 this.count = count;
             }
 
-            public override string GetValue(int column)
+            protected override string _GetValue(int column)
             {
                 if (column == 0) return name;
                 else if (column == 1) return description;
