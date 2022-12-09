@@ -125,7 +125,12 @@ namespace JamesFrowen.Benchmarker
             var max = new int[Row.ColumnCount];
             for (var i = 0; i < Row.ColumnCount; i++)
             {
-                max[i] = rows.Max(x => x.GetValue(i).Length);
+                max[i] = rows.Max(x =>
+                {
+                    var value = x.GetValue(i);
+                    // just incase value is null
+                    return (value ?? "").Length;
+                });
             }
             return max;
         }
