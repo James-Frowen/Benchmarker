@@ -36,14 +36,13 @@ namespace JamesFrowen.Benchmarker.Weaver
 {
     public static class BenchmarkHelper
     {
-        static Dictionary<int, string> s_methodNames = new Dictionary<int, string>();
-        static Dictionary<int, Frame[]> s_methods;
-
-        static int s_frameCount = 300;
-        static int s_frameIndex = 0;
-        static bool s_waitForFirstFrame = true;
-        static bool s_isRunning = false;
-        static bool s_autoEnd = false;
+        private static Dictionary<int, string> s_methodNames = new Dictionary<int, string>();
+        private static Dictionary<int, Frame[]> s_methods;
+        private static int s_frameCount = 300;
+        private static int s_frameIndex = 0;
+        private static bool s_waitForFirstFrame = true;
+        private static bool s_isRunning = false;
+        private static bool s_autoEnd = false;
 
         public static bool IsRunning => s_isRunning;
 
@@ -62,9 +61,9 @@ namespace JamesFrowen.Benchmarker.Weaver
             if (!s_isRunning) return;
             if (s_waitForFirstFrame) return;
 
-            Frame[] method = s_methods[nameHash];
-            long end = GetTimestamp();
-            method[s_frameIndex].time += (end - start);
+            var method = s_methods[nameHash];
+            var end = GetTimestamp();
+            method[s_frameIndex].time += end - start;
             method[s_frameIndex].count++;
         }
 
@@ -82,7 +81,7 @@ namespace JamesFrowen.Benchmarker.Weaver
             s_frameCount = frameCount;
             s_autoEnd = autoEnd;
             s_methods = new Dictionary<int, Frame[]>();
-            foreach (int key in s_methodNames.Keys)
+            foreach (var key in s_methodNames.Keys)
             {
                 s_methods.Add(key, new Frame[frameCount]);
             }
@@ -135,15 +134,15 @@ namespace JamesFrowen.Benchmarker.Weaver
         public static IReadOnlyList<Results> GetResults()
         {
             var results = new List<Results>(s_methodNames.Count);
-            foreach (int key in s_methodNames.Keys)
+            foreach (var key in s_methodNames.Keys)
             {
-                string fullName = s_methodNames[key];
-                Frame[] frames = s_methods[key];
+                var fullName = s_methodNames[key];
+                var frames = s_methods[key];
 
                 if (NoResults(frames))
                     continue;
 
-                BenchmarkDetails benchmark = CreateDetails(fullName);
+                var benchmark = CreateDetails(fullName);
                 results.Add(new Results(frames, benchmark));
             }
             return results;
@@ -154,7 +153,7 @@ namespace JamesFrowen.Benchmarker.Weaver
             }
         }
 
-        const BindingFlags ALL_METHODS = (BindingFlags)(-1);
+        private const BindingFlags ALL_METHODS = (BindingFlags)(-1);
 
         private static BenchmarkDetails CreateDetails(string fullName)
         {
@@ -163,17 +162,17 @@ namespace JamesFrowen.Benchmarker.Weaver
                 name = fullName,
             };
 
-            MethodInfo methodInfo = GetMethod(fullName);
+            var methodInfo = GetMethod(fullName);
             if (methodInfo != null)
             {
-                BenchmarkMethodAttribute attr = methodInfo.GetCustomAttribute<BenchmarkMethodAttribute>();
+                var attr = methodInfo.GetCustomAttribute<BenchmarkMethodAttribute>();
                 if (attr != null)
                 {
                     benchmark.name = attr.Name;
                     benchmark.description = attr.Description;
                     benchmark.baseline = attr.Baseline;
                 }
-                BenchmarkCategoryAttribute cats = methodInfo.GetCustomAttribute<BenchmarkCategoryAttribute>();
+                var cats = methodInfo.GetCustomAttribute<BenchmarkCategoryAttribute>();
                 if (cats != null)
                 {
                     benchmark.categories = cats.categories;
@@ -190,13 +189,13 @@ namespace JamesFrowen.Benchmarker.Weaver
             {
                 // example full name = `System.Void Mirage.NetworkServer::Update()`
                 fullName = fullName.Substring(fullName.IndexOf(" ") + 1);
-                int nameIndex = fullName.IndexOf("::");
+                var nameIndex = fullName.IndexOf("::");
 
-                string methodName = fullName.Substring(nameIndex + 2);
-                int bracketIndex = methodName.IndexOf("(");
+                var methodName = fullName.Substring(nameIndex + 2);
+                var bracketIndex = methodName.IndexOf("(");
                 methodName = methodName.Substring(0, bracketIndex);
 
-                string typeName = fullName.Substring(0, nameIndex);
+                var typeName = fullName.Substring(0, nameIndex);
 
                 Debug.Assert(typeName.Length != 0);
                 Debug.Assert(!typeName.Contains(":"));
@@ -218,13 +217,13 @@ namespace JamesFrowen.Benchmarker.Weaver
             }
         }
 
-        static MethodInfo GetMethod(string typeName, string methodName)
+        private static MethodInfo GetMethod(string typeName, string methodName)
         {
-            foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
-                foreach (Type type in assembly.GetTypes())
+                foreach (var type in assembly.GetTypes())
                 {
-                    MethodInfo method = CheckType(type);
+                    var method = CheckType(type);
                     if (method != null) { return method; }
                 }
             }
@@ -234,7 +233,7 @@ namespace JamesFrowen.Benchmarker.Weaver
             {
                 if (type.FullName == typeName)
                 {
-                    foreach (MethodInfo method in type.GetMethods(ALL_METHODS))
+                    foreach (var method in type.GetMethods(ALL_METHODS))
                     {
                         if (method.Name == methodName)
                         {
@@ -247,9 +246,9 @@ namespace JamesFrowen.Benchmarker.Weaver
                     }
                 }
 
-                foreach (Type nested in type.GetNestedTypes())
+                foreach (var nested in type.GetNestedTypes())
                 {
-                    MethodInfo method = CheckType(nested);
+                    var method = CheckType(nested);
                     if (method != null) { return method; }
                 }
 
@@ -285,7 +284,8 @@ namespace JamesFrowen.Benchmarker
                 BenchmarkHelper.OnEndRecording += AutoEnd;
             }
         }
-        static void AutoEnd()
+
+        private static void AutoEnd()
         {
             BenchmarkHelper.OnEndRecording -= AutoEnd;
             if (AutoLog)
@@ -305,9 +305,9 @@ namespace JamesFrowen.Benchmarker
         public static void LogResults() => LogResults(GetSavePath());
         public static void LogResults(string path)
         {
-            IReadOnlyList<Results> results = BenchmarkHelper.GetResults();
+            var results = BenchmarkHelper.GetResults();
             var analyser = new BenchmarkAnalyser(results);
-            BenchmarkAnalyser.CategoryGroup[] categories = analyser.GetCategories();
+            var categories = analyser.GetCategories();
 
             var printer = new BenchmarkPrinter(path);
             printer.PrintToMarkDownTable(categories, $"FrameCount:{s_previousFrameCount}");
@@ -316,18 +316,19 @@ namespace JamesFrowen.Benchmarker
         private static string GetSavePath()
         {
 #if UNITY_EDITOR
-            string runtime = "Editor";
+            var runtime = "Editor";
 #elif UNITY_SERVER
             string runtime = "Server";
 #else
             string runtime = "Player";
 #endif
-            string path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}.md";
+            var path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}.md";
             return path;
         }
 
-        static Updater _updater;
-        static void CheckUpdater()
+        private static Updater _updater;
+
+        private static void CheckUpdater()
         {
             if (_updater == null)
             {
@@ -338,7 +339,7 @@ namespace JamesFrowen.Benchmarker
         }
 
         [DefaultExecutionOrder(int.MaxValue)]
-        class Updater : MonoBehaviour
+        private class Updater : MonoBehaviour
         {
             private void LateUpdate()
             {

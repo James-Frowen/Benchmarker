@@ -41,7 +41,7 @@ namespace JamesFrowen.Benchmarker
         protected virtual void Teardown() { }
         protected abstract void Benchmark();
 
-        IEnumerator Start()
+        private IEnumerator Start()
         {
             Setup();
             yield return null;
@@ -62,9 +62,9 @@ namespace JamesFrowen.Benchmarker
 
         private void Warmup()
         {
-            for (int i = 0; i < WarmupCount; i++)
+            for (var i = 0; i < WarmupCount; i++)
             {
-                for (int j = 0; j < Iterations; j++)
+                for (var j = 0; j < Iterations; j++)
                 {
                     Benchmark();
                 }
@@ -73,9 +73,9 @@ namespace JamesFrowen.Benchmarker
         private void Measure()
         {
             Benchmarker.BenchmarkRunner.StartRecording(RunCount, true, false);
-            for (int i = 0; i < RunCount; i++)
+            for (var i = 0; i < RunCount; i++)
             {
-                for (int j = 0; j < Iterations; j++)
+                for (var j = 0; j < Iterations; j++)
                 {
                     Benchmark();
                 }

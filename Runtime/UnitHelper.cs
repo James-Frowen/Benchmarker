@@ -24,7 +24,7 @@ SOFTWARE.
 
 namespace JamesFrowen.Benchmarker
 {
-    static class UnitHelper
+    internal static class UnitHelper
     {
         public static (string suffix, double divider) GetTimeSuffix(double min)
         {

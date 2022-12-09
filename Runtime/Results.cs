@@ -69,7 +69,8 @@ namespace JamesFrowen.Benchmarker
         // in order to get averages we need to add (time/Count)  count times to list
         // this will give weighted average for average time per frame
         public IEnumerable<double> ElapsedPerMethod => frames.Where(x => x.count != 0).SelectMany(x => Enumerable.Repeat(frameTimeToSeconds(x), x.count));
-        double frameTimeToSeconds(Frame x) => ((double)x.time / x.count) / Stopwatch.Frequency;
+
+        private double frameTimeToSeconds(Frame x) => (double)x.time / x.count / Stopwatch.Frequency;
         public IEnumerable<double> ElapsedPerFrame => frames.Select(x => (double)x.time / Stopwatch.Frequency);
         public IEnumerable<double> CallCounts => frames.Select(x => (double)x.count);
 

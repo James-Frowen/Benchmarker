@@ -31,19 +31,19 @@ namespace JamesFrowen.Benchmarker
 {
     public class BenchmarkAnalyser
     {
-        Dictionary<string, CategoryGroup> categoryGroup = new Dictionary<string, CategoryGroup>();
+        private Dictionary<string, CategoryGroup> categoryGroup = new Dictionary<string, CategoryGroup>();
         public BenchmarkAnalyser(IEnumerable<Results> results)
         {
-            foreach (Results result in results)
+            foreach (var result in results)
             {
-                string[] categories = result.benchmark.categories;
+                var categories = result.benchmark.categories;
                 if (categories == null || categories.Length == 0)
                 {
                     addResultsToCategory(string.Empty, result);
                 }
                 else
                 {
-                    foreach (string cat in categories)
+                    foreach (var cat in categories)
                     {
                         addResultsToCategory(cat, result);
                     }
@@ -56,7 +56,7 @@ namespace JamesFrowen.Benchmarker
 
         private void addResultsToCategory(string key, Results result)
         {
-            if (!categoryGroup.TryGetValue(key, out CategoryGroup group))
+            if (!categoryGroup.TryGetValue(key, out var group))
             {
                 group = new CategoryGroup(key);
                 categoryGroup.Add(key, group);
@@ -70,7 +70,7 @@ namespace JamesFrowen.Benchmarker
 
         private void ProcessAllResults()
         {
-            foreach (CategoryGroup category in categoryGroup.Values)
+            foreach (var category in categoryGroup.Values)
             {
                 ProcessCategory(category);
             }
@@ -90,7 +90,7 @@ namespace JamesFrowen.Benchmarker
             }
 
             category.processedResults = new List<ProcessedResults>();
-            foreach (Results result in category.results)
+            foreach (var result in category.results)
             {
                 if (result.Failed) { continue; }
                 var processed = new ProcessedResults(result)
@@ -105,12 +105,12 @@ namespace JamesFrowen.Benchmarker
 
         private DataGroup CreateDataGroup(IEnumerable<double> values, double? baseLineMean)
         {
-            double mean = GetMean(values);
-            double stdDev = GetStandardDeviation(values, mean);
-            double stdError = GetStandardError(values, stdDev);
-            double? ratio = baseLineMean.HasValue ? mean / baseLineMean : null;
-            double min = GetMin(values);
-            double max = GetMax(values);
+            var mean = GetMean(values);
+            var stdDev = GetStandardDeviation(values, mean);
+            var stdError = GetStandardError(values, stdDev);
+            var ratio = baseLineMean.HasValue ? mean / baseLineMean : null;
+            var min = GetMin(values);
+            var max = GetMax(values);
 
             var data = new DataGroup
             {
@@ -138,7 +138,7 @@ namespace JamesFrowen.Benchmarker
         }
         private double GetStandardDeviation(IEnumerable<double> values, double mean)
         {
-            double sum = values
+            var sum = values
                 // convert to time
                 .Select(x => x)
                 .Select(x => x - mean)
@@ -154,7 +154,7 @@ namespace JamesFrowen.Benchmarker
 
         public void SortResults()
         {
-            foreach (CategoryGroup category in categoryGroup.Values)
+            foreach (var category in categoryGroup.Values)
             {
                 category.processedResults.Sort(new ProcessedResultsComparer());
             }

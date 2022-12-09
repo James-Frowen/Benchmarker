@@ -52,7 +52,7 @@ namespace JamesFrowen.Benchmarker
             rows.AddRange(Row.GetTitle());
             rows.Add(Row.Empty);
 
-            for (int i = 0; i < categories.Length; i++)
+            for (var i = 0; i < categories.Length; i++)
             {
                 if (i > 0)
                 {
@@ -60,8 +60,8 @@ namespace JamesFrowen.Benchmarker
                     rows.Add(Row.Empty);
                 }
 
-                BenchmarkAnalyser.CategoryGroup category = categories[i];
-                foreach (BenchmarkAnalyser.ProcessedResults result in category.processedResults)
+                var category = categories[i];
+                foreach (var result in category.processedResults)
                 {
                     rows.Add(new DataRow(result, category.name));
                 }
@@ -70,7 +70,7 @@ namespace JamesFrowen.Benchmarker
             // todo do we only want to set units per catetgory?
             SetUnits(rows);
 
-            int[] paddingLength = GetPaddingLength(rows);
+            var paddingLength = GetPaddingLength(rows);
 
             Debug.Log($"Saving benchmark results to {path}");
             CheckDirectory(path);
@@ -79,7 +79,7 @@ namespace JamesFrowen.Benchmarker
 #if UNITY_SERVER
                 bool isServer = true;
 #else
-                bool isServer = false;
+                var isServer = false;
 #endif
                 writer.WriteLine("**Application**");
                 writer.WriteLine($"- UnityVersion:{Application.unityVersion}");
@@ -92,7 +92,7 @@ namespace JamesFrowen.Benchmarker
                 {
                     writer.WriteLine();
                     writer.WriteLine();
-                    foreach (string header in headers)
+                    foreach (var header in headers)
                     {
                         writer.WriteLine($"- {header}");
                     }
@@ -104,7 +104,7 @@ namespace JamesFrowen.Benchmarker
                 writer.WriteLine("**Results**");
                 writer.WriteLine();
 
-                foreach (Row row in rows)
+                foreach (var row in rows)
                 {
                     writer.WriteLine(row.CreatePaddedString(paddingLength));
                 }
@@ -113,17 +113,17 @@ namespace JamesFrowen.Benchmarker
 
         private void CheckDirectory(string path)
         {
-            string dir = Path.GetDirectoryName(path);
+            var dir = Path.GetDirectoryName(path);
             if (!Directory.Exists(dir))
             {
                 Directory.CreateDirectory(dir);
             }
         }
 
-        static int[] GetPaddingLength(List<Row> rows)
+        private static int[] GetPaddingLength(List<Row> rows)
         {
-            int[] max = new int[Row.ColumnCount];
-            for (int i = 0; i < Row.ColumnCount; i++)
+            var max = new int[Row.ColumnCount];
+            for (var i = 0; i < Row.ColumnCount; i++)
             {
                 max[i] = rows.Max(x => x.GetValue(i).Length);
             }
@@ -133,12 +133,12 @@ namespace JamesFrowen.Benchmarker
 
         private static void SetUnits(List<Row> rows)
         {
-            IEnumerable<DataRow> dataRows = rows.Select(x => x as DataRow).Where(x => x != null);
+            var dataRows = rows.Select(x => x as DataRow).Where(x => x != null);
 
             SetTimeUnits(dataRows.Select(x => x.methodTime));
             SetTimeUnits(dataRows.Select(x => x.frameTime));
 
-            foreach (DataRow.DataGroup row in dataRows.Select(x => x.count))
+            foreach (var row in dataRows.Select(x => x.count))
             {
                 row.SetStringWithUnits("", 1);
             }
@@ -147,41 +147,40 @@ namespace JamesFrowen.Benchmarker
 
         private static void SetTimeUnits(IEnumerable<DataRow.DataGroup> dataGroups)
         {
-            double[] means = (dataGroups
+            var means = dataGroups
                 .Select(x => x.mean.raw)
                 .Where(x => x.HasValue)
                 .Select(x => x.Value)
-                .ToArray());
+                .ToArray();
 
             if (means.Length == 0)
             {
                 return;
             }
 
-            double min = means.Min();
+            var min = means.Min();
 
-            (string suffix, double divider) = UnitHelper.GetTimeSuffix(min);
+            (var suffix, var divider) = UnitHelper.GetTimeSuffix(min);
 
-            foreach (DataRow.DataGroup row in dataGroups)
+            foreach (var row in dataGroups)
             {
                 row.SetStringWithUnits(suffix, divider);
             }
         }
 
-
-        abstract class Row
+        private abstract class Row
         {
             // text+6*data
-            public const int ColumnCount = 3 + 6 * 3;
+            public const int ColumnCount = 3 + (6 * 3);
 
             public static readonly Row Empty = new EmptyRow();
 
             public static IEnumerable<Row> GetTitle()
             {
-                string[] dataHeaders = new string[] { "Mean", "Ratio", "StdDev", "StdError", "min", "max" };
+                var dataHeaders = new string[] { "Mean", "Ratio", "StdDev", "StdError", "min", "max" };
 
                 IEnumerable<string> first = new string[] { "Name", "Description", "Category" };
-                IEnumerable<string> second = Enumerable.Repeat("", 3);
+                var second = Enumerable.Repeat("", 3);
 
 
                 first = first.Append("time").Append("method").Concat(Enumerable.Repeat("", 4));
@@ -206,8 +205,8 @@ namespace JamesFrowen.Benchmarker
 
             public string GetPaddedValue(int column, int width, char padding)
             {
-                string value = GetValue(column);
-                bool rightPad = isRightPad(column);
+                var value = GetValue(column);
+                var rightPad = isRightPad(column);
 
                 return rightPad
                     ? value.PadRight(width, padding)
@@ -224,21 +223,22 @@ namespace JamesFrowen.Benchmarker
             }
             public string CreatePaddedString(int[] paddingLength)
             {
-                string[] cols = new string[Row.ColumnCount];
+                var cols = new string[Row.ColumnCount];
 
-                for (int i = 0; i < Row.ColumnCount; i++)
+                for (var i = 0; i < Row.ColumnCount; i++)
                 {
                     // 1 padding either side
-                    string inner = GetPaddedValue(i, paddingLength[i], padding);
+                    var inner = GetPaddedValue(i, paddingLength[i], padding);
                     cols[i] = padding + inner + padding;
                 }
-                string joined = string.Join("|", cols);
+                var joined = string.Join("|", cols);
                 return $"|{joined}|";
             }
         }
-        class StringRow : Row
+
+        private class StringRow : Row
         {
-            string[] values;
+            private string[] values;
             public StringRow(params string[] values)
             {
                 this.values = values;
@@ -249,7 +249,8 @@ namespace JamesFrowen.Benchmarker
                 return values[column];
             }
         }
-        class EmptyRow : Row
+
+        private class EmptyRow : Row
         {
             public EmptyRow()
             {
@@ -260,7 +261,8 @@ namespace JamesFrowen.Benchmarker
                 return string.Empty;
             }
         }
-        class DataRow : Row
+
+        private class DataRow : Row
         {
             public string name;
             public string description;
@@ -302,9 +304,9 @@ namespace JamesFrowen.Benchmarker
                 if (column == 0) return name;
                 else if (column == 1) return description;
                 else if (column == 2) return category;
-                else if (column < 3 + 6 * 1) return methodTime.GetValue(column - (3 + 6 * 0));
-                else if (column < 3 + 6 * 2) return count.GetValue(column - (3 + 6 * 1));
-                else if (column < 3 + 6 * 3) return frameTime.GetValue(column - (3 + 6 * 2));
+                else if (column < 3 + (6 * 1)) return methodTime.GetValue(column - (3 + (6 * 0)));
+                else if (column < 3 + (6 * 2)) return count.GetValue(column - (3 + (6 * 1)));
+                else if (column < 3 + (6 * 3)) return frameTime.GetValue(column - (3 + (6 * 2)));
                 else throw new IndexOutOfRangeException();
             }
 
@@ -370,7 +372,7 @@ namespace JamesFrowen.Benchmarker
                 {
                     if (raw.HasValue)
                     {
-                        double value = raw.Value / divider;
+                        var value = raw.Value / divider;
                         text = $"{value:0.000} {suffix}";
                     }
                 }
