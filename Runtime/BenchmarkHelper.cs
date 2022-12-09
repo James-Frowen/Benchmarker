@@ -168,7 +168,8 @@ namespace JamesFrowen.Benchmarker.Weaver
                 var attr = methodInfo.GetCustomAttribute<BenchmarkMethodAttribute>();
                 if (attr != null)
                 {
-                    benchmark.name = attr.Name;
+                    if (!string.IsNullOrEmpty(attr.Name))
+                        benchmark.name = attr.Name;
                     benchmark.description = attr.Description;
                     benchmark.baseline = attr.Baseline;
                 }
