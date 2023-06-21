@@ -1,4 +1,4 @@
-﻿/*
+/*
 MIT License
 
 Copyright (c) 2022 James Frowen
@@ -72,7 +72,11 @@ namespace JamesFrowen.Benchmarker
 
             var paddingLength = GetPaddingLength(rows);
 
+#if UNITY_2019_3_OR_NEWER
             Debug.Log($"Saving benchmark results to {path}");
+#else
+            Console.WriteLine($"Saving benchmark results to {path}");
+#endif
             CheckDirectory(path);
             using (var writer = new StreamWriter(path))
             {
@@ -82,10 +86,22 @@ namespace JamesFrowen.Benchmarker
                 var isServer = false;
 #endif
                 writer.WriteLine("**Application**");
+#if UNITY_2019_3_OR_NEWER
                 writer.WriteLine($"- UnityVersion:{Application.unityVersion}");
+#else
+                writer.WriteLine($"- UnityVersion: Not unity");
+#endif
                 writer.WriteLine($"- Platform:{Application.platform}");
                 writer.WriteLine($"- IsEditor:{Application.isEditor}");
+#if UNITY_2019_3_OR_NEWER
                 writer.WriteLine($"- IsDebug:{Debug.isDebugBuild}");
+#else
+#if DEBUG
+                writer.WriteLine($"- IsDebug:true");
+#else
+                writer.WriteLine($"- IsDebug:false");
+#endif
+#endif
                 writer.WriteLine($"- IsServer:{isServer}");
 
                 if (headers != null && headers.Length > 0)
@@ -217,6 +233,9 @@ namespace JamesFrowen.Benchmarker
             public string GetPaddedValue(int column, int width, char padding)
             {
                 var value = GetValue(column);
+                if (value == null)
+                    value = "";
+
                 var rightPad = isRightPad(column);
 
                 return rightPad

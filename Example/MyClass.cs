@@ -3,25 +3,25 @@ using UnityEngine;
 
 public class MyClass : MonoBehaviour
 {
-    void none()
+    private void none()
     {
 
     }
 
     [BenchmarkMethod]
-    void empty()
+    private void empty()
     {
 
     }
 
     [BenchmarkMethod]
-    void withLog()
+    private void withLog()
     {
         Debug.Log("do stuff");
     }
 
     [BenchmarkMethod]
-    void withEarlyExit(int a)
+    private void withEarlyExit(int a)
     {
         if (a == 2)
         {
@@ -36,13 +36,13 @@ public class MyClass : MonoBehaviour
     }
 
     [BenchmarkMethod]
-    int withReturn(int a)
+    private int withReturn(int a)
     {
         return a * a;
     }
 
     [BenchmarkMethod]
-    int withMultipleReturn(int a)
+    private int withMultipleReturn(int a)
     {
         if (a < 10)
             return a * a;

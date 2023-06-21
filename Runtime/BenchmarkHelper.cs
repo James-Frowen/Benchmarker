@@ -29,8 +29,10 @@ using System.Linq;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using JamesFrowen.Benchmarker.Weaver;
+
+#if UNITY_2019_3_OR_NEWER
 using UnityEngine;
-using Debug = UnityEngine.Debug;
+#endif
 
 namespace JamesFrowen.Benchmarker.Weaver
 {
@@ -198,16 +200,31 @@ namespace JamesFrowen.Benchmarker.Weaver
 
                 var typeName = fullName.Substring(0, nameIndex);
 
-                Debug.Assert(typeName.Length != 0);
-                Debug.Assert(!typeName.Contains(":"));
-                Debug.Assert(!typeName.Contains(" "));
+                if (typeName.Length == 0)
+                    throw new ArgumentException("typeName cannot be empty.");
+                if (typeName.Contains(":"))
+                    throw new ArgumentException("typeName cannot contain a colon (:).");
 
-                Debug.Assert(methodName.Length != 0);
-                Debug.Assert(!methodName.Contains(":"));
-                Debug.Assert(!methodName.Contains(" "));
-                Debug.Assert(!methodName.Contains("("));
-                Debug.Assert(!methodName.Contains(")"));
-                Debug.Assert(!methodName.Contains(","));
+                if (typeName.Contains(" "))
+                    throw new ArgumentException("typeName cannot contain a space.");
+
+                if (methodName.Length == 0)
+                    throw new ArgumentException("methodName cannot be empty.");
+
+                if (methodName.Contains(":"))
+                    throw new ArgumentException("methodName cannot contain a colon (:).");
+
+                if (methodName.Contains(" "))
+                    throw new ArgumentException("methodName cannot contain a space.");
+
+                if (methodName.Contains("("))
+                    throw new ArgumentException("methodName cannot contain a opening parenthesis (().");
+
+                if (methodName.Contains(")"))
+                    throw new ArgumentException("methodName cannot contain a closing parenthesis ())");
+
+                if (methodName.Contains(","))
+                    throw new ArgumentException("methodName cannot contain a comma (,).");
 
                 return GetMethod(typeName, methodName);
             }
@@ -278,7 +295,9 @@ namespace JamesFrowen.Benchmarker
         public static void StartRecording(int frameCount, bool autoEnd, bool waitForFirstFrame)
         {
             s_previousFrameCount = frameCount;
+#if UNITY_2019_3_OR_NEWER
             CheckUpdater();
+#endif
             BenchmarkHelper.StartRecording(frameCount, autoEnd, waitForFirstFrame);
             if (autoEnd)
             {
@@ -321,12 +340,13 @@ namespace JamesFrowen.Benchmarker
 #elif UNITY_SERVER
             string runtime = "Server";
 #else
-            string runtime = "Player";
+            var runtime = "Player";
 #endif
             var path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}.md";
             return path;
         }
 
+#if UNITY_2019_3_OR_NEWER
         private static Updater _updater;
 
         private static void CheckUpdater()
@@ -347,6 +367,7 @@ namespace JamesFrowen.Benchmarker
                 BenchmarkHelper.NextFrame();
             }
         }
+#endif
     }
 }
 

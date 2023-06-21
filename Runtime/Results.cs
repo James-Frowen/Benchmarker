@@ -70,7 +70,7 @@ namespace JamesFrowen.Benchmarker
         // this will give weighted average for average time per frame
         public IEnumerable<double> ElapsedPerMethod => frames.Where(x => x.count != 0).SelectMany(x => Enumerable.Repeat(frameTimeToSeconds(x), x.count));
 
-        private double frameTimeToSeconds(Frame x) => (double)x.time / x.count / Stopwatch.Frequency;
+        private double frameTimeToSeconds(Frame x) => ((double)x.time / x.count) / Stopwatch.Frequency;
         public IEnumerable<double> ElapsedPerFrame => frames.Select(x => (double)x.time / Stopwatch.Frequency);
         public IEnumerable<double> CallCounts => frames.Select(x => (double)x.count);
 
@@ -80,7 +80,7 @@ namespace JamesFrowen.Benchmarker
             this.frames = frames;
             this.benchmark = benchmark;
 
-            if (this.frames == null) { Failed = true; }
+            if (this.frames == null) { this.Failed = true; }
         }
     }
 }

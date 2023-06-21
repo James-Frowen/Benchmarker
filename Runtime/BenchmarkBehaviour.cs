@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
+using System;
 using System.Collections;
 using JamesFrowen.Benchmarker.Weaver;
 using UnityEngine;
@@ -55,8 +56,11 @@ namespace JamesFrowen.Benchmarker
 
 #if UNITY_EDITOR
             UnityEditor.EditorApplication.isPlaying = false;
-#else
+
+#elif UNITY_2019_3_OR_NEWER
             Application.Quit();
+#else
+            Environment.Exit(0);
 #endif
         }
 

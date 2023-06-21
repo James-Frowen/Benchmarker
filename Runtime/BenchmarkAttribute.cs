@@ -41,9 +41,9 @@ namespace JamesFrowen.Benchmarker
         public BenchmarkMethodAttribute() { }
         public BenchmarkMethodAttribute(string name, bool baseline = false, string description = "")
         {
-            Name = name;
-            Baseline = baseline;
-            Description = description;
+            this.Name = name;
+            this.Baseline = baseline;
+            this.Description = description;
         }
     }
 
