@@ -31,16 +31,34 @@ using Debug = UnityEngine.Debug;
 
 namespace JamesFrowen.Benchmarker
 {
-    public class BenchmarkPrinter
+    public abstract class BenchmarkPrinter
     {
-        private readonly string path;
+        protected readonly string path;
 
-        public BenchmarkPrinter(string path)
+        protected BenchmarkPrinter(string path)
         {
             this.path = path;
+            CheckDirectory(path);
         }
 
-        public void PrintToMarkDownTable(BenchmarkAnalyser.CategoryGroup[] categories, params string[] headers)
+        private void CheckDirectory(string path)
+        {
+            var dir = Path.GetDirectoryName(path);
+            if (!Directory.Exists(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+        }
+
+        public abstract void Print(BenchmarkAnalyser.CategoryGroup[] categories, params string[] metaData);
+    }
+    public class MarkDownBenchmarkPrinter : BenchmarkPrinter
+    {
+        public MarkDownBenchmarkPrinter(string path) : base(path)
+        {
+        }
+
+        public override void Print(BenchmarkAnalyser.CategoryGroup[] categories, params string[] metaData)
         {
             if (categories.Length == 0)
             {
@@ -77,7 +95,6 @@ namespace JamesFrowen.Benchmarker
 #else
             Console.WriteLine($"Saving benchmark results to {path}");
 #endif
-            CheckDirectory(path);
             using (var writer = new StreamWriter(path))
             {
 #if UNITY_SERVER
@@ -104,11 +121,11 @@ namespace JamesFrowen.Benchmarker
 #endif
                 writer.WriteLine($"- IsServer:{isServer}");
 
-                if (headers != null && headers.Length > 0)
+                if (metaData != null && metaData.Length > 0)
                 {
                     writer.WriteLine();
                     writer.WriteLine();
-                    foreach (var header in headers)
+                    foreach (var header in metaData)
                     {
                         writer.WriteLine($"- {header}");
                     }
@@ -127,14 +144,6 @@ namespace JamesFrowen.Benchmarker
             }
         }
 
-        private void CheckDirectory(string path)
-        {
-            var dir = Path.GetDirectoryName(path);
-            if (!Directory.Exists(dir))
-            {
-                Directory.CreateDirectory(dir);
-            }
-        }
 
         private static int[] GetPaddingLength(List<Row> rows)
         {
