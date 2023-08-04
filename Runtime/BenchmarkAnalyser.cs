@@ -98,7 +98,9 @@ namespace JamesFrowen.Benchmarker
                     methodTime = CreateDataGroup(result.ElapsedPerMethod, baselineMeanMethodTime),
                     count = CreateDataGroup(result.CallCounts, baselineMeanCount),
                     frameTime = CreateDataGroup(result.ElapsedPerFrame, baselineMeanFrameTime),
+                    BaseLine = result == category.baseline,
                 };
+
                 category.processedResults.Add(processed);
             }
         }
@@ -178,9 +180,11 @@ namespace JamesFrowen.Benchmarker
                 name = key;
             }
         }
+        [Serializable]
         public class ProcessedResults
         {
             public bool Failed;
+            public bool BaseLine;
             public BenchmarkDetails benchmark;
 
             public DataGroup methodTime;
@@ -193,6 +197,7 @@ namespace JamesFrowen.Benchmarker
                 benchmark = result.benchmark;
             }
         }
+        [Serializable]
         public class DataGroup
         {
             /// <summary>

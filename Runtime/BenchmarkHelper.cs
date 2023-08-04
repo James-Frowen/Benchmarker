@@ -55,6 +55,10 @@ namespace JamesFrowen.Benchmarker.Weaver
         {
             s_methodNames[name.GetHashCode()] = name;
         }
+        public static void RegisterMethod(int id, string name)
+        {
+            s_methodNames[id] = name;
+        }
 
         // called by IL
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -286,6 +290,8 @@ namespace JamesFrowen.Benchmarker
 
         public static bool IsRecording => BenchmarkHelper.IsRunning;
 
+        public static List<string> MetaData;
+
         /// <summary>
         /// Starts recording time and call count for methods
         /// </summary>
@@ -329,8 +335,16 @@ namespace JamesFrowen.Benchmarker
             var analyser = new BenchmarkAnalyser(results);
             var categories = analyser.GetCategories();
 
-            var printer = new BenchmarkPrinter(path);
-            printer.PrintToMarkDownTable(categories, $"FrameCount:{s_previousFrameCount}");
+            var meta = new List<string>();
+            meta.Add($"FrameCount:{s_previousFrameCount}");
+            if (MetaData != null)
+                meta.AddRange(MetaData);
+
+            var printer = new MarkDownBenchmarkPrinter(path + ".md");
+            printer.Print(categories, meta.ToArray());
+
+            var jsonPrinter = new JsonBenchmarkPrinter(path + ".json");
+            jsonPrinter.Print(categories, meta.ToArray());
         }
 
         private static string GetSavePath()
@@ -342,7 +356,7 @@ namespace JamesFrowen.Benchmarker
 #else
             var runtime = "Player";
 #endif
-            var path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}.md";
+            var path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}";
             return path;
         }
 
