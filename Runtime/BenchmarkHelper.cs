@@ -286,6 +286,7 @@ namespace JamesFrowen.Benchmarker
     {
         public static bool AutoLog = true;
         public static string ResultFolder = ".";
+        public static string ResultName = "";
         private static int s_previousFrameCount;
 
         public static bool IsRecording => BenchmarkHelper.IsRunning;
@@ -349,14 +350,24 @@ namespace JamesFrowen.Benchmarker
 
         private static string GetSavePath()
         {
+            string name;
+            if (string.IsNullOrEmpty(ResultName))
+            {
 #if UNITY_EDITOR
-            var runtime = "Editor";
+                var runtime = "Editor";
 #elif UNITY_SERVER
-            string runtime = "Server";
+                string runtime = "Server";
 #else
-            var runtime = "Player";
+                var runtime = "Player";
 #endif
-            var path = $"{ResultFolder}/Results-{runtime}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}";
+                name = $"Results-{runtime}";
+            }
+            else
+            {
+                name = ResultName;
+            }
+
+            var path = $"{ResultFolder}/{name}_{$"{DateTime.Now:yyyy-MM-dd_HH-mm-ss}"}";
             return path;
         }
 
