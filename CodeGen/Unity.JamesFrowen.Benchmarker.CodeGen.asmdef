@@ -1,8 +1,10 @@
 {
     "name": "Unity.JamesFrowen.Benchmarker.CodeGen",
+    "rootNamespace": "",
     "references": [
         "JamesFrowen.Benchmarker",
-        "Unity.Mirage.CodeGen"
+        "Unity.Mirage.CodeGen",
+        "Unity.Mirage.CecilExtensions.CodeGen"
     ],
     "includePlatforms": [
         "Editor"

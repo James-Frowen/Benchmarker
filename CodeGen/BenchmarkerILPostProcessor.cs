@@ -22,13 +22,9 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Reflection;
 using JamesFrowen.Benchmarker.Weaver;
-using Mirage.Weaver;
+using Mirage.CodeGen;
 using Mono.Cecil;
 using Mono.Cecil.Cil;
 using Unity.CompilationPipeline.Common.ILPostProcessing;
@@ -39,58 +35,37 @@ namespace JamesFrowen.Benchmarker.ILWeave
 {
     public class BenchmarkerILPostProcessor : ILPostProcessor
     {
-        public override ILPostProcessor GetInstance() => this;
+        public const string RuntimeAssemblyName = "JamesFrowen.Benchmarker";
 
-        public override bool WillProcess(ICompiledAssembly compiledAssembly)
-        {
-            return compiledAssembly.References.Any(filePath => Path.GetFileNameWithoutExtension(filePath) == "JamesFrowen.Benchmarker");
-        }
+        public sealed override ILPostProcessor GetInstance() => this;
 
         public override ILPostProcessResult Process(ICompiledAssembly compiledAssembly)
         {
-            if (!WillProcess(compiledAssembly))
-                return null;
-
-            try
-            {
-                AssemblyDefinition assembly = Mirage.Weaver.Weaver.AssemblyDefinitionFor(compiledAssembly);
-                ModuleDefinition module = assembly.MainModule;
-                bool anyChanges = ProcessAllMethods(module);
-                if (!anyChanges)
-                    return null;
-
-                // write
-                var pe = new MemoryStream();
-                var pdb = new MemoryStream();
-
-                var writerParameters = new WriterParameters
-                {
-                    SymbolWriterProvider = new PortablePdbWriterProvider(),
-                    SymbolStream = pdb,
-                    WriteSymbols = true
-                };
-
-                assembly?.Write(pe, writerParameters);
-
-                return new ILPostProcessResult(new InMemoryAssembly(pe.ToArray(), pdb.ToArray()), new List<Unity.CompilationPipeline.Common.Diagnostics.DiagnosticMessage>());
-            }
-            catch (Exception e)
-            {
-                return new ILPostProcessResult(null, new List<Unity.CompilationPipeline.Common.Diagnostics.DiagnosticMessage> {
-                    new Unity.CompilationPipeline.Common.Diagnostics.DiagnosticMessage{
-                        DiagnosticType=  Unity.CompilationPipeline.Common.Diagnostics.DiagnosticType.Error,
-                        MessageData = $"Failed to weaver Benchmarker: {e}",
-                    } });
-            }
+            return ILPPHelper.CreateAndProcess(compiledAssembly, RuntimeAssemblyName, _ => new BenchmarkerWeaver());
         }
 
-        bool ProcessAllMethods(ModuleDefinition module)
+        public override bool WillProcess(ICompiledAssembly compiledAssembly) => ILPPHelper.WillProcess(compiledAssembly, RuntimeAssemblyName);
+    }
+
+    public class BenchmarkerWeaver : WeaverBase
+    {
+        protected override ResultType Process(AssemblyDefinition assembly, ICompiledAssembly compiledAssembly)
         {
-            bool any = false;
+            var module = assembly.MainModule;
+            var anyChanges = ProcessAllMethods(module);
+
+            return anyChanges
+                ? ResultType.Success
+                : ResultType.NoChanges;
+        }
+
+        private bool ProcessAllMethods(ModuleDefinition module)
+        {
+            var any = false;
             // create copies of collections incase we add any
-            foreach (TypeDefinition type in module.Types.ToArray())
+            foreach (var type in module.Types.ToArray())
             {
-                foreach (MethodDefinition method in type.Methods.ToArray())
+                foreach (var method in type.Methods.ToArray())
                 {
                     if (method.HasCustomAttribute<BenchmarkMethodAttribute>())
                     {
@@ -102,31 +77,31 @@ namespace JamesFrowen.Benchmarker.ILWeave
 
             if (any)
             {
-                ILProcessor worker = GeneratedMethod(module);
+                var worker = GeneratedMethod(module);
                 worker.Append(worker.Create(OpCodes.Ret));
             }
             return any;
         }
 
-        void InsertBenchmark(ModuleDefinition module, MethodDefinition method)
+        private void InsertBenchmark(ModuleDefinition module, MethodDefinition method)
         {
-            VariableDefinition timeVar = method.AddLocal<long>();
+            var timeVar = method.AddLocal<long>();
 
-            ILProcessor worker = method.Body.GetILProcessor();
-            Instruction first = method.Body.Instructions.First();
+            var worker = method.Body.GetILProcessor();
+            var first = method.Body.Instructions.First();
             worker.InsertBefore(first, worker.Create(OpCodes.Call, () => BenchmarkHelper.GetTimestamp()));
             worker.InsertBefore(first, worker.Create(OpCodes.Stloc, timeVar));
 
-            string name = method.FullName;
+            var name = method.FullName;
 
             // for each return, add BenchmarkHelper.EndMethod
-            foreach (Instruction oldRet in method.Body.Instructions.Where(x => x.OpCode == OpCodes.Ret).ToArray())
+            foreach (var oldRet in method.Body.Instructions.Where(x => x.OpCode == OpCodes.Ret).ToArray())
             {
                 // change to nop, just incase jumps go to this return
                 oldRet.OpCode = OpCodes.Nop;
 
                 // add new ret after old one, and then insert BenchmarkHelper.EndMethod after
-                Instruction newRet = worker.Create(OpCodes.Ret);
+                var newRet = worker.Create(OpCodes.Ret);
                 worker.InsertAfter(oldRet, newRet);
                 worker.InsertBefore(newRet, worker.Create(OpCodes.Ldc_I4, name.GetHashCode()));
                 worker.InsertBefore(newRet, worker.Create(OpCodes.Ldloc, timeVar));
@@ -138,7 +113,7 @@ namespace JamesFrowen.Benchmarker.ILWeave
 
         public static TypeDefinition GeneratedClass(ModuleDefinition module)
         {
-            TypeDefinition type = module.GetType("JamesFrowen.Benchmarker", "BenchmarkInit");
+            var type = module.GetType("JamesFrowen.Benchmarker", "BenchmarkInit");
             if (type != null)
                 return type;
 
@@ -151,8 +126,8 @@ namespace JamesFrowen.Benchmarker.ILWeave
 
         public static ILProcessor GeneratedMethod(ModuleDefinition module)
         {
-            TypeDefinition generatedClass = GeneratedClass(module);
-            MethodDefinition method = generatedClass.GetMethod("InitMethods");
+            var generatedClass = GeneratedClass(module);
+            var method = generatedClass.GetMethod("InitMethods");
             if (method != null)
             {
                 return method.Body.GetILProcessor();
@@ -163,13 +138,13 @@ namespace JamesFrowen.Benchmarker.ILWeave
                    "InitMethods",
                    Mono.Cecil.MethodAttributes.Public | Mono.Cecil.MethodAttributes.Static);
 
-                ConstructorInfo attributeconstructor = typeof(RuntimeInitializeOnLoadMethodAttribute).GetConstructor(new[] { typeof(RuntimeInitializeLoadType) });
+                var attributeconstructor = typeof(RuntimeInitializeOnLoadMethodAttribute).GetConstructor(new[] { typeof(RuntimeInitializeLoadType) });
 
                 var customAttributeRef = new CustomAttribute(module.ImportReference(attributeconstructor));
                 customAttributeRef.ConstructorArguments.Add(new CustomAttributeArgument(module.ImportReference<RuntimeInitializeLoadType>(), RuntimeInitializeLoadType.BeforeSceneLoad));
                 method.CustomAttributes.Add(customAttributeRef);
 
-                ILProcessor worker = method.Body.GetILProcessor();
+                var worker = method.Body.GetILProcessor();
 
                 return worker;
             }
@@ -177,7 +152,7 @@ namespace JamesFrowen.Benchmarker.ILWeave
 
         public static void RegisterMethod(ModuleDefinition module, string methodName)
         {
-            ILProcessor worker = GeneratedMethod(module);
+            var worker = GeneratedMethod(module);
 
             worker.Append(worker.Create(OpCodes.Ldstr, methodName));
             worker.Append(worker.Create(OpCodes.Call, () => BenchmarkHelper.RegisterMethod(default)));
